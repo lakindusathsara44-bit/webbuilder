@@ -20,9 +20,14 @@ export default function WebsiteEditor({ site, token, userId, onBack, onSaved }) 
   const [error, setError] = useState("");
   const dirtyRef = useRef(false);
   const firstRenderRef = useRef(true);
+  const documentRef = useRef(document);
+  const onSavedRef = useRef(onSaved);
+  documentRef.current = document;
+  onSavedRef.current = onSaved;
 
   useEffect(() => {
     setDocument(site.document || { ...DEFAULT_DOCUMENT });
+    documentRef.current = site.document || { ...DEFAULT_DOCUMENT };
     dirtyRef.current = false;
     firstRenderRef.current = true;
     setSaveStatus("saved");
@@ -37,22 +42,44 @@ export default function WebsiteEditor({ site, token, userId, onBack, onSaved }) 
     setSaveStatus("saving");
     const timer = window.setTimeout(async () => {
       try {
-        const updated = await saveSite(site.id, document, userId, token);
+        const snapshot = documentRef.current;
+        const updated = await saveSite(site.id, snapshot, userId, token);
         dirtyRef.current = false;
         setSaveStatus("saved");
         setError("");
-        onSaved?.({ ...site, ...updated, document });
+        onSavedRef.current?.({ ...site, ...updated, document: snapshot });
       } catch (err) {
         setSaveStatus("error");
         setError(err.message || "Autosave failed. Your changes remain in this editor.");
       }
     }, 900);
     return () => window.clearTimeout(timer);
-  }, [document, site, token, userId, onSaved]);
+  }, [document, site.id, token, userId]);
 
   function updateDocument(next) {
     dirtyRef.current = true;
-    setDocument((current) => ({ ...current, ...next }));
+    setDocument((current) => {
+      const updated = { ...current, ...next };
+      documentRef.current = updated;
+      return updated;
+    });
+  }
+
+  async function handleBack() {
+    if (dirtyRef.current) {
+      setSaveStatus("saving");
+      try {
+        const snapshot = documentRef.current;
+        const updated = await saveSite(site.id, snapshot, userId, token);
+        dirtyRef.current = false;
+        onSavedRef.current?.({ ...site, ...updated, document: snapshot });
+      } catch (err) {
+        setSaveStatus("error");
+        setError(err.message || "Could not save your latest changes. Stay here and retry.");
+        return;
+      }
+    }
+    onBack();
   }
 
   const editorLanguage = codeTab === "html" ? "html" : codeTab === "css" ? "css" : "javascript";
@@ -60,7 +87,7 @@ export default function WebsiteEditor({ site, token, userId, onBack, onSaved }) 
   return (
     <main className="website-editor-shell">
       <header className="editor-topbar">
-        <button className="editor-back" onClick={onBack} title="Back to websites">← <span>Websites</span></button>
+        <button className="editor-back" onClick={handleBack} title="Back to websites">← <span>Websites</span></button>
         <div className="editor-site-heading"><b>{site.name}</b><span>{site.subdomain}.sites.apokolips.xyz</span></div>
         <div className={"save-indicator " + saveStatus}><i />{saveStatus === "saving" ? "Saving…" : saveStatus === "error" ? "Save failed" : "All changes saved"}</div>
         <span className="editor-draft">DRAFT</span>
@@ -82,11 +109,11 @@ export default function WebsiteEditor({ site, token, userId, onBack, onSaved }) 
         </div>}
       </nav>
 
-      {error && <div className="editor-error" role="alert">{error}</div>}
+      {error && <div className="editor-error" role="alert">{error} <button onClick={() => { dirtyRef.current = true; setDocument((current) => ({ ...current })); }}>Retry save</button></div>}
 
       <section className="editor-workspace">
         {mode === "visual" && <VisualEditor key={site.id + "-visual"} document={document} onChange={updateDocument} />}
-        {mode === "code" && <div className="monaco-wrap"><div className="monaco-header"><span>{codeTab === "js" ? "script.js" : "index." + codeTab}</span><span>MONACO EDITOR</span></div><Editor height="100%" language={editorLanguage} theme="vs-dark" value={document[codeTab]} onChange={(value) => updateDocument({ [codeTab]: value ?? "" })} options={{ minimap: { enabled: false }, fontSize: 14, automaticLayout: true, wordWrap: "on", scrollBeyondLastLine: false, tabSize: 2, padding: { top: 18 } }} /></div>}
+        {mode === "code" && <div className="monaco-wrap"><div className="monaco-header"><span>{codeTab === "js" ? "script.js" : "index." + codeTab}</span><span>MONACO EDITOR</span></div><Editor height="100%" language={editorLanguage} theme="vs-dark" value={document[codeTab]} onChange={(value) => updateDocument({ [codeTab]: value ?? "", ...((codeTab === "html" || codeTab === "css") ? { project: null } : {}) })} options={{ minimap: { enabled: false }, fontSize: 14, automaticLayout: true, wordWrap: "on", scrollBeyondLastLine: false, tabSize: 2, padding: { top: 18 } }} /></div>}
         {mode === "preview" && <div className="preview-stage"><div className={"preview-frame " + previewDevice}><iframe title="Website preview" sandbox="allow-scripts allow-forms allow-modals" srcDoc={makePreview(document)} /></div></div>}
       </section>
       <footer className="editor-footer"><span>APOKOLIPS BUILDER · MILESTONE 02</span><span>Autosave enabled · Draft not published</span></footer>
