@@ -1,4 +1,4 @@
-import { createRemoteJWKSet, jwtVerify } from "jose";
+import { createRemoteJWKSet, decodeProtectedHeader, jwtVerify } from "jose";
 
 const MAX_DOCUMENT_BYTES = 2 * 1024 * 1024;
 const DRAFT_PATH = "site.json";
@@ -40,16 +40,52 @@ function getJwks(env) {
 }
 
 async function requireUser(request, env, headers) {
-  if (!env.SUPABASE_URL) {
-    return { response: json({ error: "Supabase authentication is not configured for this Worker." }, 503, headers) };
-  }
   const authorization = request.headers.get("Authorization") || "";
-  const match = authorization.match(/^Bearer\s+(.+)$/i);
+  const match = authorization.match(/^Bearer\\s+(.+)$/i);
   if (!match) return { response: json({ error: "Authentication required" }, 401, headers) };
+  if (!env.SUPABASE_URL) {
+    return { response: json({ error: "SUPABASE_URL is not configured on this Worker." }, 503, headers) };
+  }
 
   try {
-    const issuer = env.SUPABASE_URL.replace(/\/$/, "") + "/auth/v1";
-    const { payload } = await jwtVerify(match[1], getJwks(env), {
+    const token = match[1];
+    const issuer = env.SUPABASE_URL.replace(/\\/$/, "") + "/auth/v1";
+    const protectedHeader = decodeProtectedHeader(token);
+
+    // Legacy/shared-secret HS256 tokens are not exposed through the public JWKS.
+    // Validate them against Supabase Auth instead of trying to verify them locally.
+    if (protectedHeader.alg === "HS256") {
+      const apiKey = env.SUPABASE_PUBLISHABLE_KEY || env.SUPABASE_ANON_KEY;
+      if (!apiKey) {
+        return { response: json({ error: "Set SUPABASE_PUBLISHABLE_KEY on the Worker to validate this project's HS256 access tokens." }, 503, headers) };
+      }
+
+      let authResponse;
+      try {
+        authResponse = await fetch(issuer + "/user", {
+          method: "GET",
+          headers: {
+            "apikey": apiKey,
+            "Authorization": "Bearer " + token
+          }
+        });
+      } catch {
+        return { response: json({ error: "Supabase Auth could not be reached to verify this session. Please try again." }, 503, headers) };
+      }
+
+      if (!authResponse.ok) {
+        return { response: json({ error: "Invalid or expired access token" }, 401, headers) };
+      }
+
+      const authUser = await authResponse.json();
+      if (!authUser || typeof authUser.id !== "string") {
+        return { response: json({ error: "Supabase Auth returned an invalid user response." }, 401, headers) };
+      }
+      return { user: { id: authUser.id, role: "authenticated" } };
+    }
+
+    // Asymmetric signing keys are verified locally with Supabase's public JWKS.
+    const { payload } = await jwtVerify(token, getJwks(env), {
       issuer,
       audience: "authenticated"
     });
