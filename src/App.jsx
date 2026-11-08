@@ -1,5 +1,7 @@
-import { useEffect, useRef, useState } from "react";
-import MonacoEditor from "@monaco-editor/react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
+
+// Load Monaco only when the HTML Editor is opened. This keeps the home page and Notepad lightweight on mobile.
+const MonacoEditor = lazy(() => import("@monaco-editor/react"));
 
 const NOTEPAD_KEY = "apokolips-office:notepad:v1";
 const HTML_KEY = "apokolips-office:html-editor:v1";
@@ -385,6 +387,7 @@ function HtmlEditor() {
               <small>HTML</small>
             </div>
             <div className="monaco-wrap">
+              <Suspense fallback={<div style={{ padding: "20px", color: "#9fb0c2", fontSize: "12px" }}>Loading code editor…</div>}>
               <MonacoEditor
                 height="100%"
                 language="html"
@@ -407,6 +410,7 @@ function HtmlEditor() {
                   suggestOnTriggerCharacters: true
                 }}
               />
+              </Suspense>
             </div>
             <div className="panel-footer"><span>{draft.code.split("\n").length} lines</span><span>Ctrl + S · Download HTML</span></div>
           </section>
