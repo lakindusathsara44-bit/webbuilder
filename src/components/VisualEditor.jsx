@@ -20,14 +20,17 @@ export default function VisualEditor({ document, onChange }) {
 
   useEffect(() => {
     if (!mountRef.current) return undefined;
+    const savedProject = documentRef.current.project;
     const editor = grapesjs.init({
       container: mountRef.current,
       height: "100%",
       width: "auto",
       fromElement: false,
       storageManager: false,
-      components: documentRef.current.html,
-      style: documentRef.current.css,
+      ...(savedProject ? { projectData: savedProject } : {
+        components: documentRef.current.html,
+        style: documentRef.current.css
+      }),
       blockManager: { blocks },
       selectorManager: { componentFirst: true },
       deviceManager: {
