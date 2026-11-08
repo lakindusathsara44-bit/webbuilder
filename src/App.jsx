@@ -186,7 +186,7 @@ function Dashboard() {
           </div>
           <div className="tool-grid">
             <ToolCard
-              href={`${APP_BASE}notepad/`}
+              href={`${APP_BASE}?tool=notepad`}
               number="01"
               icon="Aa"
               title="Notepad"
@@ -195,7 +195,7 @@ function Dashboard() {
               features={["Write and edit text", "Open and download text files", "Automatic local saving"]}
             />
             <ToolCard
-              href={`${APP_BASE}html-editor/`}
+              href={`${APP_BASE}?tool=html-editor`}
               number="02"
               icon="</>"
               title="HTML Editor"
@@ -433,7 +433,7 @@ function HtmlEditor() {
           </section>
         </div>
       </main>
-      <footer className="editor-footer"><a href="/">← Back to Office</a><span>Drafts are saved in this browser only.</span></footer>
+      <footer className="editor-footer"><a href={APP_BASE}>← Back to Office</a><span>Drafts are saved in this browser only.</span></footer>
     </div>
   );
 }
