@@ -1,0 +1,27 @@
+name: Builder build check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  dashboard:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install dashboard dependencies
+        run: npm install --no-audit --no-fund
+      - name: Build dashboard
+        run: npm run build
+      - name: Check Worker JavaScript syntax
+        run: node --check workers/api/src/index.js
