@@ -1,0 +1,23 @@
+name = "apokolips-builder-api"
+main = "src/index.js"
+compatibility_date = "2026-11-08"
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+SUPABASE_URL = "https://qccbsuxomdqdwfnqoycb.supabase.co"
+DASHBOARD_ORIGIN = "https://builder.apokolips.xyz"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "apokolips-builder-db"
+database_id = "REPLACE_WITH_D1_DATABASE_ID"
+migrations_dir = "migrations"
+
+[[r2_buckets]]
+binding = "ASSETS"
+bucket_name = "apokolips-builder-assets"
+
+# Copy this example to wrangler.toml only after creating the D1 database
+# and R2 bucket. Keep secrets out of this file:
+#   npx wrangler secret put SUPABASE_URL
+# SUPABASE_URL above is a non-secret project URL and may remain in vars.
