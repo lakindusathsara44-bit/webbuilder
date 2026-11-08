@@ -1,206 +1,441 @@
-import { useCallback, useEffect, useState } from "react";
-import { supabase, supabaseConfigured } from "./lib/supabase.js";
-import { API_CONFIGURED, createSite, deleteSite, listSites, loadSite } from "./lib/sites.js";
-import WebsiteEditor from "./components/WebsiteEditor.jsx";
-import "./components/builder.css";
+import { useEffect, useRef, useState } from "react";
+import MonacoEditor from "@monaco-editor/react";
 
-function BrandMark() {
-  return <div className="brand-mark" aria-hidden="true"><span>A</span></div>;
+const NOTEPAD_KEY = "apokolips-office:notepad:v1";
+const HTML_KEY = "apokolips-office:html-editor:v1";
+
+const STARTER_HTML = [
+  "<!doctype html>",
+  '<html lang="en">',
+  "<head>",
+  '  <meta charset="UTF-8" />',
+  '  <meta name="viewport" content="width=device-width, initial-scale=1.0" />',
+  "  <title>My first page</title>",
+  "  <style>",
+  "    body {",
+  '      font-family: Arial, sans-serif;',
+  "      max-width: 760px;",
+  "      margin: 70px auto;",
+  "      padding: 0 24px;",
+  "      color: #172033;",
+  "      line-height: 1.6;",
+  "    }",
+  "    h1 { color: #075985; }",
+  "    .card {",
+  "      padding: 24px;",
+  "      border: 1px solid #dbeafe;",
+  "      border-radius: 16px;",
+  "      background: #f8fbff;",
+  "    }",
+  "  </style>",
+  "</head>",
+  "<body>",
+  '  <main class="card">',
+  "    <h1>Hello, Apokolips!</h1>",
+  "    <p>Start editing this HTML to build your own page.</p>",
+  '    <button id="helloButton">Try it</button>',
+  "  </main>",
+  "  <script>",
+  '    document.getElementById("helloButton").addEventListener("click", () => {',
+  '      alert("Your HTML, CSS and JavaScript are working!");',
+  "    });",
+  "  </script>",
+  "</body>",
+  "</html>"
+].join("\n");
+
+function readDraft(key, fallback) {
+  try {
+    const stored = window.localStorage.getItem(key);
+    if (!stored) return fallback;
+    const parsed = JSON.parse(stored);
+    return { ...fallback, ...parsed };
+  } catch {
+    return fallback;
+  }
 }
 
-function SignIn() {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState("");
+function useAutoSave(key, value) {
+  const [status, setStatus] = useState("Saved on this device");
 
-  async function handleSubmit(event) {
-    event.preventDefault();
-    setMessage("");
-    if (!supabaseConfigured || !supabase) {
-      setMessage("Supabase is not configured. Add the values in .env.local and restart the dev server.");
-      return;
-    }
-    setBusy(true);
-    const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
-    setBusy(false);
-    if (error) setMessage(error.message);
-  }
+  useEffect(() => {
+    setStatus("Saving…");
+    const timer = window.setTimeout(() => {
+      try {
+        window.localStorage.setItem(key, JSON.stringify(value));
+        setStatus("Saved on this device");
+      } catch {
+        setStatus("Browser storage is unavailable or full");
+      }
+    }, 350);
 
+    return () => window.clearTimeout(timer);
+  }, [key, value]);
+
+  return status;
+}
+
+function safeFileName(name, extension) {
+  const cleaned = (name || "").trim().replace(/[\\/:*?"<>|]+/g, "-");
+  const base = cleaned || ("untitled" + extension);
+  return /\.[a-z0-9]{1,8}$/i.test(base) ? base : base + extension;
+}
+
+function downloadText(content, name, mimeType) {
+  const blob = new Blob([content], { type: mimeType });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = name;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function Brand({ compact = false }) {
   return (
-    <main className="auth-layout">
-      <section className="auth-panel">
-        <div className="brand-row"><BrandMark /><div><p className="eyebrow">APOKOLIPS PLATFORM</p><h1>Website Builder</h1></div></div>
-        <div className="auth-copy">
-          <p className="eyebrow">PRIVATE BETA ACCESS</p>
-          <h2>Build something<br /><span>extraordinary.</span></h2>
-          <p className="muted">Sign in to manage your websites, design pages, and prepare them for publishing to your own Apokolips address.</p>
-        </div>
-        <form className="auth-form" onSubmit={handleSubmit}>
-          <label htmlFor="email">Email address</label>
-          <input id="email" type="email" autoComplete="username" placeholder="you@example.com" value={email} onChange={(event) => setEmail(event.target.value)} required />
-          <label htmlFor="password">Password</label>
-          <input id="password" type="password" autoComplete="current-password" placeholder="Enter your password" value={password} onChange={(event) => setPassword(event.target.value)} required />
-          {message && <p className="form-message" role="alert">{message}</p>}
-          <button className="primary-button" type="submit" disabled={busy}>{busy ? "Signing in…" : "Sign in to Builder"}<span aria-hidden="true">↗</span></button>
-        </form>
-        <p className="invite-note">Invite-only beta · New accounts are created by an administrator.</p>
-      </section>
-      <aside className="visual-panel" aria-label="Platform information">
-        <div className="orb orb-one" /><div className="orb orb-two" />
-        <div className="visual-top"><span className="status-dot" /> BUILDER ENVIRONMENT <span className="visual-version">BETA 0.2</span></div>
-        <div className="visual-content">
-          <div className="mini-window">
-            <div className="window-bar"><i /><i /><i /><span>your-site.sites.apokolips.xyz</span></div>
-            <div className="window-body"><div className="mock-nav"><b>YOUR BRAND</b><span>HOME　 ABOUT　 CONTACT</span></div><div className="mock-hero"><small>YOUR NEXT CHAPTER STARTS HERE</small><strong>Make your<br />presence known.</strong><div className="mock-cta">Explore website　↗</div></div><div className="mock-footer"><span /><span /><span /></div></div>
-          </div>
-          <h3>Your ideas.<br />Your website. Your space.</h3>
-          <p className="muted">A single workspace for designing, managing, and publishing your websites.</p>
-        </div>
-        <div className="visual-bottom"><span>APOKOLIPS</span><span>DESIGNED FOR THE NEXT WEB</span></div>
-      </aside>
-    </main>
+    <a className={"brand-lockup" + (compact ? " brand-compact" : "")} href="/" aria-label="Apokolips Office home">
+      <span className="brand-mark">A</span>
+      <span className="brand-wordmark">
+        <strong>APOKOLIPS</strong>
+        <small>OFFICE</small>
+      </span>
+    </a>
   );
 }
 
-function makeSubdomain(name) {
-  const base = name.toLowerCase().normalize("NFKD").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 25) || "my-site";
-  const suffix = globalThis.crypto?.randomUUID?.().slice(0, 5) || Math.random().toString(36).slice(2, 7);
-  return base + "-" + suffix;
+function MainWebsiteLink() {
+  return (
+    <a className="main-website-link" href="https://www.apokolips.xyz" target="_blank" rel="noreferrer">
+      Main website <span aria-hidden="true">↗</span>
+    </a>
+  );
 }
 
-function Dashboard({ session }) {
-  const [sites, setSites] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [creating, setCreating] = useState(false);
-  const [siteName, setSiteName] = useState("");
-  const [activeSite, setActiveSite] = useState(null);
-  const [error, setError] = useState("");
+function ToolCard({ href, number, icon, title, description, features, label }) {
+  return (
+    <article className="tool-card">
+      <div className="tool-card-top">
+        <span className="tool-icon" aria-hidden="true">{icon}</span>
+        <span className="tool-number">{number}</span>
+      </div>
+      <div className="tool-card-copy">
+        <div className="tool-title-line">
+          <h3>{title}</h3>
+          <span className="free-pill">FREE</span>
+        </div>
+        <p>{description}</p>
+      </div>
+      <ul className="feature-list">
+        {features.map((feature) => <li key={feature}><span aria-hidden="true">✓</span>{feature}</li>)}
+      </ul>
+      <a className="launch-button" href={href}>
+        Open {label} <span aria-hidden="true">↗</span>
+      </a>
+    </article>
+  );
+}
 
-  const refreshSites = useCallback(async () => {
-    setLoading(true);
-    setError("");
-    try {
-      const result = await listSites(session.user.id, session.access_token);
-      setSites(result);
-    } catch (err) {
-      setError(err.message || "Could not load websites.");
-    } finally {
-      setLoading(false);
+function Dashboard() {
+  return (
+    <div className="dashboard-page">
+      <header className="site-header">
+        <Brand />
+        <div className="header-actions">
+          <span className="edition-pill"><span /> FREE EDITION</span>
+          <MainWebsiteLink />
+        </div>
+      </header>
+
+      <main className="dashboard-main">
+        <section className="hero-section">
+          <div className="hero-copy">
+            <span className="eyebrow"><span className="eyebrow-line" /> YOUR SIMPLE DIGITAL WORKSPACE</span>
+            <h1>Make space for<br /><span>your ideas.</span></h1>
+            <p>Write notes, create HTML pages, and experiment with code in one clean workspace. No account or subscription required.</p>
+            <a className="hero-cta" href="#free-tools">Explore free tools <span aria-hidden="true">↓</span></a>
+          </div>
+          <div className="hero-art" aria-hidden="true">
+            <div className="art-glow" />
+            <div className="art-window art-window-back">
+              <div className="art-window-bar"><i /><i /><i /></div>
+              <div className="art-code-lines"><b /><b /><b /><b /><b /></div>
+            </div>
+            <div className="art-window art-window-front">
+              <div className="art-window-bar"><i /><i /><i /><span>Untitled note</span></div>
+              <div className="art-paper">
+                <strong>Your next idea<br />starts here.</strong>
+                <span /><span /><span />
+              </div>
+            </div>
+            <div className="art-caption">CREATE · WRITE · BUILD</div>
+          </div>
+        </section>
+
+        <section className="tools-section" id="free-tools">
+          <div className="section-heading">
+            <div>
+              <span className="eyebrow">START HERE</span>
+              <h2>Your free tools</h2>
+            </div>
+            <p>Two lightweight tools. One place to create.</p>
+          </div>
+          <div className="tool-grid">
+            <ToolCard
+              href="/notepad/"
+              number="01"
+              icon="Aa"
+              title="Notepad"
+              label="Notepad"
+              description="A distraction-free space for quick notes, drafts, lists and plain text."
+              features={["Write and edit text", "Open and download text files", "Automatic local saving"]}
+            />
+            <ToolCard
+              href="/html-editor/"
+              number="02"
+              icon="</>"
+              title="HTML Editor"
+              label="HTML Editor"
+              description="Write HTML, CSS and JavaScript, then see your page update in a live preview."
+              features={["Code editor with syntax highlighting", "Live preview in a safe frame", "Open and download HTML files"]}
+            />
+          </div>
+        </section>
+
+        <section className="privacy-note">
+          <span className="privacy-icon" aria-hidden="true">⌂</span>
+          <div>
+            <strong>Your work stays in this browser for now.</strong>
+            <p>Drafts are automatically saved on this device. Cloud sync and account features are not part of this free first release.</p>
+          </div>
+        </section>
+      </main>
+
+      <footer className="site-footer">
+        <span>APOKOLIPS OFFICE <i>·</i> FREE TOOLS</span>
+        <span>IDEAS BECOME SOMETHING REAL.</span>
+      </footer>
+    </div>
+  );
+}
+
+function EditorHeader({ title, subtitle, status }) {
+  return (
+    <header className="editor-header">
+      <div className="editor-brand-area">
+        <Brand compact />
+        <span className="header-divider" />
+        <div className="editor-heading">
+          <strong>{title}</strong>
+          <small>{subtitle}</small>
+        </div>
+      </div>
+      <div className="editor-header-right">
+        <span className="save-status"><i />{status}</span>
+        <MainWebsiteLink />
+      </div>
+    </header>
+  );
+}
+
+function Notepad() {
+  const [draft, setDraft] = useState(() => readDraft(NOTEPAD_KEY, { name: "Untitled.txt", text: "" }));
+  const fileInput = useRef(null);
+  const textArea = useRef(null);
+  const status = useAutoSave(NOTEPAD_KEY, draft);
+
+  const words = draft.text.trim() ? draft.text.trim().split(/\s+/).length : 0;
+  const lines = draft.text ? draft.text.split("\n").length : 1;
+
+  function handleOpen(event) {
+    const file = event.target.files && event.target.files[0];
+    event.target.value = "";
+    if (!file) return;
+    file.text()
+      .then((text) => setDraft({ name: file.name, text }))
+      .catch(() => window.alert("This file could not be opened."));
+  }
+
+  function handleDownload() {
+    downloadText(draft.text, safeFileName(draft.name, ".txt"), "text/plain;charset=utf-8");
+  }
+
+  function handleClear() {
+    if (draft.text && !window.confirm("Clear this note? The saved draft will also be replaced.")) return;
+    setDraft({ name: "Untitled.txt", text: "" });
+    textArea.current?.focus();
+  }
+
+  function handleKeyDown(event) {
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") {
+      event.preventDefault();
+      handleDownload();
     }
-  }, [session.user.id, session.access_token]);
-
-  useEffect(() => { refreshSites(); }, [refreshSites]);
-
-  async function handleCreate(event) {
-    event.preventDefault();
-    const name = siteName.trim();
-    if (!name) return;
-    setCreating(true);
-    setError("");
-    try {
-      const site = await createSite({ name, subdomain: makeSubdomain(name) }, session.user.id, session.access_token);
-      setSites((current) => [site, ...current]);
-      setSiteName("");
-      setActiveSite(site);
-    } catch (err) {
-      setError(err.message || "Website creation failed.");
-    } finally {
-      setCreating(false);
-    }
-  }
-
-  async function openSite(site) {
-    setError("");
-    try {
-      const fullSite = await loadSite(site.id, session.user.id, session.access_token);
-      setActiveSite(fullSite);
-    } catch (err) {
-      setError(err.message || "Could not open this website.");
-    }
-  }
-
-  async function handleDelete(site) {
-    if (!window.confirm("Delete " + site.name + "? This cannot be undone.")) return;
-    setError("");
-    try {
-      await deleteSite(site.id, session.user.id, session.access_token);
-      setSites((current) => current.filter((item) => item.id !== site.id));
-      if (activeSite?.id === site.id) setActiveSite(null);
-    } catch (err) {
-      setError(err.message || "Website deletion failed.");
-    }
-  }
-
-  async function signOut() {
-    await supabase.auth.signOut();
-  }
-
-  function handleSaved(updated) {
-    setSites((current) => current.map((item) => item.id === updated.id ? { ...item, ...updated } : item));
-    setActiveSite((current) => current ? { ...current, ...updated } : current);
-  }
-
-  if (activeSite) {
-    return <WebsiteEditor site={activeSite} token={session.access_token} userId={session.user.id} onBack={() => { setActiveSite(null); refreshSites(); }} onSaved={handleSaved} />;
   }
 
   return (
-    <main className="dashboard builder-dashboard">
-      <header className="dashboard-header">
-        <div className="brand-row compact"><BrandMark /><div><p className="eyebrow">APOKOLIPS</p><h1>Website Builder</h1></div></div>
-        <div className="account-area"><span className="account-email">{session.user.email}</span><button className="quiet-button" onClick={signOut}>Sign out</button></div>
-      </header>
-
-      <section className="welcome builder-welcome">
-        <p className="eyebrow">YOUR WORKSPACE</p>
-        <h2>Welcome to your<br /><span>creative space.</span></h2>
-        <p className="muted">Create a website, edit it visually or directly in code, and save your work automatically.</p>
-      </section>
-
-      <section className="workspace-card sites-workspace">
-        <div className="workspace-card-top"><div><p className="eyebrow">WEBSITES</p><h3>Your websites</h3></div><span className={API_CONFIGURED ? "connection-label connected" : "connection-label local"}>{API_CONFIGURED ? "CLOUDFLARE API CONFIGURED" : "LOCAL BROWSER MODE"}</span></div>
-        {!API_CONFIGURED && <p className="mode-note">Cloudflare API is not connected yet. Websites created now are saved only in this browser and will not sync between devices.</p>}
-        <form className="create-site-form" onSubmit={handleCreate}>
-          <input aria-label="Website name" placeholder="Enter a website name…" value={siteName} onChange={(event) => setSiteName(event.target.value)} maxLength={60} required />
-          <button className="primary-button create-site-button" type="submit" disabled={creating}>{creating ? "Creating…" : "＋ Create website"}</button>
-        </form>
-        {error && <p className="form-message" role="alert">{error}</p>}
-        {loading ? <div className="empty-state"><div className="loading-mark small">A</div><p className="muted">Loading your websites…</p></div> : sites.length === 0 ? (
-          <div className="empty-state"><div className="empty-icon">＋</div><h4>No websites yet</h4><p className="muted">Create your first website to open the visual and code editors.</p></div>
-        ) : (
-          <div className="site-grid">
-            {sites.map((site) => (
-              <article className="site-card" key={site.id}>
-                <div className="site-card-art"><div className="site-card-window"><span /><span /><span /><div className="site-card-preview"><b>{site.name.slice(0, 28)}</b><i /></div></div></div>
-                <div className="site-card-content"><div className="site-card-title"><h4>{site.name}</h4><span className="draft-label">DRAFT</span></div><p className="site-domain">{site.subdomain}.sites.apokolips.xyz</p><div className="site-card-actions"><button className="primary-button site-edit-button" onClick={() => openSite(site)}>Open editor <span>↗</span></button><button className="delete-button" onClick={() => handleDelete(site)} aria-label={"Delete " + site.name} title="Delete website">⌫</button></div></div>
-              </article>
-            ))}
+    <div className="editor-page">
+      <EditorHeader title="Notepad" subtitle="Simple writing space" status={status} />
+      <main className="notepad-main">
+        <div className="editor-toolbar">
+          <div className="document-name-wrap">
+            <span className="document-type-icon">TXT</span>
+            <input
+              aria-label="Note file name"
+              className="document-name-input"
+              value={draft.name}
+              onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))}
+              maxLength={90}
+            />
           </div>
-        )}
-      </section>
-      <footer className="dashboard-footer"><span>APOKOLIPS WEBSITE BUILDER</span><span>PRIVATE BETA · 0.2.0</span></footer>
-    </main>
+          <div className="toolbar-actions">
+            <input ref={fileInput} className="visually-hidden" type="file" accept=".txt,.text,.md,.csv,.json,text/plain" onChange={handleOpen} />
+            <button className="toolbar-button" onClick={() => fileInput.current?.click()}><span>↥</span> Open</button>
+            <button className="toolbar-button toolbar-primary" onClick={handleDownload}><span>↓</span> Download TXT</button>
+            <button className="toolbar-button toolbar-danger" onClick={handleClear}>Clear</button>
+          </div>
+        </div>
+
+        <section className="notepad-sheet">
+          <div className="paper-label"><span>YOUR NOTE</span><span>PLAIN TEXT</span></div>
+          <textarea
+            ref={textArea}
+            className="notepad-textarea"
+            value={draft.text}
+            onChange={(event) => setDraft((current) => ({ ...current, text: event.target.value }))}
+            onKeyDown={handleKeyDown}
+            placeholder="Start writing your thoughts here…"
+            spellCheck="true"
+            aria-label="Notepad text editor"
+          />
+          <div className="notepad-sheet-footer">
+            <span>Autosaved locally</span>
+            <span>{words} words <i>·</i> {draft.text.length} characters <i>·</i> {lines} lines</span>
+          </div>
+        </section>
+      </main>
+      <footer className="editor-footer"><a href="/">← Back to Office</a><span>Tip: use Ctrl + S to download your note.</span></footer>
+    </div>
+  );
+}
+
+function HtmlEditor() {
+  const [draft, setDraft] = useState(() => readDraft(HTML_KEY, { name: "index.html", code: STARTER_HTML }));
+  const [previewVersion, setPreviewVersion] = useState(0);
+  const fileInput = useRef(null);
+  const editorRef = useRef(null);
+  const draftRef = useRef(draft);
+  draftRef.current = draft;
+  const status = useAutoSave(HTML_KEY, draft);
+
+  function handleOpen(event) {
+    const file = event.target.files && event.target.files[0];
+    event.target.value = "";
+    if (!file) return;
+    file.text()
+      .then((code) => setDraft({ name: file.name, code }))
+      .catch(() => window.alert("This HTML file could not be opened."));
+  }
+
+  function handleDownload() {
+    downloadText(draftRef.current.code, safeFileName(draftRef.current.name, ".html"), "text/html;charset=utf-8");
+  }
+
+  function handleReset() {
+    if (!window.confirm("Restore the starter HTML? Your current code will be replaced.")) return;
+    setDraft({ name: "index.html", code: STARTER_HTML });
+    setPreviewVersion((current) => current + 1);
+  }
+
+  function handleEditorMount(editor, monaco) {
+    editorRef.current = editor;
+    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => handleDownload());
+  }
+
+  return (
+    <div className="editor-page html-editor-page">
+      <EditorHeader title="HTML Editor" subtitle="HTML · CSS · JavaScript" status={status} />
+      <main className="html-editor-main">
+        <div className="editor-toolbar html-toolbar">
+          <div className="document-name-wrap">
+            <span className="document-type-icon html-type-icon">HTML</span>
+            <input
+              aria-label="HTML file name"
+              className="document-name-input"
+              value={draft.name}
+              onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))}
+              maxLength={90}
+            />
+          </div>
+          <div className="toolbar-actions">
+            <input ref={fileInput} className="visually-hidden" type="file" accept=".html,.htm,text/html" onChange={handleOpen} />
+            <button className="toolbar-button" onClick={() => fileInput.current?.click()}><span>↥</span> Open</button>
+            <button className="toolbar-button toolbar-primary" onClick={handleDownload}><span>↓</span> Download HTML</button>
+            <button className="toolbar-button" onClick={() => setPreviewVersion((current) => current + 1)}>↻ Refresh</button>
+            <button className="toolbar-button toolbar-danger" onClick={handleReset}>Reset</button>
+          </div>
+        </div>
+
+        <div className="html-editor-layout">
+          <section className="editor-panel code-panel">
+            <div className="panel-heading">
+              <span><i className="panel-dot code-dot" /> CODE EDITOR</span>
+              <small>HTML</small>
+            </div>
+            <div className="monaco-wrap">
+              <MonacoEditor
+                height="100%"
+                language="html"
+                theme="vs-dark"
+                value={draft.code}
+                onChange={(value) => setDraft((current) => ({ ...current, code: value ?? "" }))}
+                onMount={handleEditorMount}
+                options={{
+                  automaticLayout: true,
+                  minimap: { enabled: false },
+                  fontSize: 13,
+                  fontFamily: "'Cascadia Code', 'Fira Code', Consolas, monospace",
+                  lineNumbers: "on",
+                  scrollBeyondLastLine: false,
+                  wordWrap: "on",
+                  tabSize: 2,
+                  padding: { top: 16, bottom: 16 },
+                  renderLineHighlight: "line",
+                  bracketPairColorization: { enabled: true },
+                  suggestOnTriggerCharacters: true
+                }}
+              />
+            </div>
+            <div className="panel-footer"><span>{draft.code.split("\n").length} lines</span><span>Ctrl + S · Download HTML</span></div>
+          </section>
+
+          <section className="editor-panel preview-panel">
+            <div className="panel-heading">
+              <span><i className="panel-dot preview-dot" /> LIVE PREVIEW</span>
+              <small>SAFE FRAME</small>
+            </div>
+            <div className="preview-browser-bar"><span /><span /><span /><div>Local preview</div></div>
+            <iframe
+              key={previewVersion}
+              className="preview-frame"
+              title="HTML live preview"
+              srcDoc={draft.code}
+              sandbox="allow-scripts"
+              referrerPolicy="no-referrer"
+            />
+            <div className="panel-footer"><span>Changes update automatically</span><span>Scripts run in an isolated frame</span></div>
+          </section>
+        </div>
+      </main>
+      <footer className="editor-footer"><a href="/">← Back to Office</a><span>Drafts are saved in this browser only.</span></footer>
+    </div>
   );
 }
 
 export default function App() {
-  const [session, setSession] = useState(null);
-  const [checking, setChecking] = useState(true);
-
-  useEffect(() => {
-    if (!supabase) { setChecking(false); return undefined; }
-    let mounted = true;
-    supabase.auth.getSession().then(({ data }) => {
-      if (mounted) { setSession(data.session); setChecking(false); }
-    }).catch(() => { if (mounted) setChecking(false); });
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, nextSession) => {
-      setSession(nextSession);
-      setChecking(false);
-    });
-    return () => { mounted = false; listener.subscription.unsubscribe(); };
-  }, []);
-
-  if (checking) return <main className="loading-screen"><div className="loading-mark">A</div><p>Loading your workspace…</p></main>;
-  return session ? <Dashboard session={session} /> : <SignIn />;
+  const path = window.location.pathname.replace(/\/+$/, "") || "/";
+  if (path === "/notepad" || path.endsWith("/notepad")) return <Notepad />;
+  if (path === "/html-editor" || path.endsWith("/html-editor")) return <HtmlEditor />;
+  return <Dashboard />;
 }

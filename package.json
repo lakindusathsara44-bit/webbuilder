@@ -1,7 +1,7 @@
 {
-  "name": "apokolips-website-builder",
+  "name": "apokolips-office",
   "private": true,
-  "version": "0.2.0",
+  "version": "0.1.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -10,8 +10,6 @@
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",
-    "@supabase/supabase-js": "^2.57.0",
-    "grapesjs": "^0.23.8",
     "monaco-editor": "^0.57.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0"
