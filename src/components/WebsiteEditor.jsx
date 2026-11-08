@@ -22,14 +22,19 @@ export default function WebsiteEditor({ site, token, userId, onBack, onSaved }) 
   const firstRenderRef = useRef(true);
   const documentRef = useRef(document);
   const onSavedRef = useRef(onSaved);
+  const versionRef = useRef(0);
+  const savedVersionRef = useRef(0);
   documentRef.current = document;
   onSavedRef.current = onSaved;
 
   useEffect(() => {
-    setDocument(site.document || { ...DEFAULT_DOCUMENT });
-    documentRef.current = site.document || { ...DEFAULT_DOCUMENT };
+    const initial = site.document || { ...DEFAULT_DOCUMENT };
+    setDocument(initial);
+    documentRef.current = initial;
     dirtyRef.current = false;
     firstRenderRef.current = true;
+    versionRef.current = 0;
+    savedVersionRef.current = 0;
     setSaveStatus("saved");
   }, [site.id]);
 
@@ -39,24 +44,31 @@ export default function WebsiteEditor({ site, token, userId, onBack, onSaved }) 
       return undefined;
     }
     if (!dirtyRef.current) return undefined;
+    const version = versionRef.current;
+    const snapshot = document;
     setSaveStatus("saving");
     const timer = window.setTimeout(async () => {
       try {
-        const snapshot = documentRef.current;
         const updated = await saveSite(site.id, snapshot, userId, token);
-        dirtyRef.current = false;
-        setSaveStatus("saved");
-        setError("");
+        savedVersionRef.current = Math.max(savedVersionRef.current, version);
+        if (version === versionRef.current) {
+          dirtyRef.current = false;
+          setSaveStatus("saved");
+          setError("");
+        }
         onSavedRef.current?.({ ...site, ...updated, document: snapshot });
       } catch (err) {
-        setSaveStatus("error");
-        setError(err.message || "Autosave failed. Your changes remain in this editor.");
+        if (version === versionRef.current) {
+          setSaveStatus("error");
+          setError(err.message || "Autosave failed. Your changes remain in this editor.");
+        }
       }
     }, 900);
     return () => window.clearTimeout(timer);
   }, [document, site.id, token, userId]);
 
   function updateDocument(next) {
+    versionRef.current += 1;
     dirtyRef.current = true;
     setDocument((current) => {
       const updated = { ...current, ...next };
@@ -66,12 +78,18 @@ export default function WebsiteEditor({ site, token, userId, onBack, onSaved }) 
   }
 
   async function handleBack() {
-    if (dirtyRef.current) {
+    if (savedVersionRef.current < versionRef.current) {
+      const version = versionRef.current;
+      const snapshot = documentRef.current;
       setSaveStatus("saving");
       try {
-        const snapshot = documentRef.current;
         const updated = await saveSite(site.id, snapshot, userId, token);
-        dirtyRef.current = false;
+        savedVersionRef.current = version;
+        if (version === versionRef.current) {
+          dirtyRef.current = false;
+          setSaveStatus("saved");
+          setError("");
+        }
         onSavedRef.current?.({ ...site, ...updated, document: snapshot });
       } catch (err) {
         setSaveStatus("error");
@@ -109,7 +127,7 @@ export default function WebsiteEditor({ site, token, userId, onBack, onSaved }) 
         </div>}
       </nav>
 
-      {error && <div className="editor-error" role="alert">{error} <button onClick={() => { dirtyRef.current = true; setDocument((current) => ({ ...current })); }}>Retry save</button></div>}
+      {error && <div className="editor-error" role="alert">{error} <button onClick={() => updateDocument({})}>Retry save</button></div>}
 
       <section className="editor-workspace">
         {mode === "visual" && <VisualEditor key={site.id + "-visual"} document={document} onChange={updateDocument} />}
