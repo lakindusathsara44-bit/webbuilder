@@ -24,6 +24,7 @@ export default function WebsiteEditor({ site, token, userId, onBack, onSaved }) 
   const onSavedRef = useRef(onSaved);
   const versionRef = useRef(0);
   const savedVersionRef = useRef(0);
+  const saveQueueRef = useRef(Promise.resolve());
   documentRef.current = document;
   onSavedRef.current = onSaved;
 
@@ -35,6 +36,7 @@ export default function WebsiteEditor({ site, token, userId, onBack, onSaved }) 
     firstRenderRef.current = true;
     versionRef.current = 0;
     savedVersionRef.current = 0;
+    saveQueueRef.current = Promise.resolve();
     setSaveStatus("saved");
   }, [site.id]);
 
@@ -49,7 +51,9 @@ export default function WebsiteEditor({ site, token, userId, onBack, onSaved }) 
     setSaveStatus("saving");
     const timer = window.setTimeout(async () => {
       try {
-        const updated = await saveSite(site.id, snapshot, userId, token);
+        const task = saveQueueRef.current.then(() => saveSite(site.id, snapshot, userId, token));
+        saveQueueRef.current = task.catch(() => {});
+        const updated = await task;
         savedVersionRef.current = Math.max(savedVersionRef.current, version);
         if (version === versionRef.current) {
           dirtyRef.current = false;
@@ -83,7 +87,9 @@ export default function WebsiteEditor({ site, token, userId, onBack, onSaved }) 
       const snapshot = documentRef.current;
       setSaveStatus("saving");
       try {
-        const updated = await saveSite(site.id, snapshot, userId, token);
+        const task = saveQueueRef.current.then(() => saveSite(site.id, snapshot, userId, token));
+        saveQueueRef.current = task.catch(() => {});
+        const updated = await task;
         savedVersionRef.current = version;
         if (version === versionRef.current) {
           dirtyRef.current = false;
