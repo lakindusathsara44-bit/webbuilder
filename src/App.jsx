@@ -1,7 +1,4 @@
-import { lazy, Suspense, useEffect, useRef, useState } from "react";
-
-// Load Monaco only when the HTML Editor is opened. This keeps the home page and Notepad lightweight on mobile.
-const MonacoEditor = lazy(() => import("@monaco-editor/react"));
+import { useEffect, useRef, useState } from "react";
 
 const NOTEPAD_KEY = "apokolips-office:notepad:v1";
 const HTML_KEY = "apokolips-office:html-editor:v1";
@@ -387,30 +384,18 @@ function HtmlEditor() {
               <small>HTML</small>
             </div>
             <div className="monaco-wrap">
-              <Suspense fallback={<div style={{ padding: "20px", color: "#9fb0c2", fontSize: "12px" }}>Loading code editor…</div>}>
-              <MonacoEditor
-                height="100%"
-                language="html"
-                theme="vs-dark"
+              <textarea
+                className="code-textarea"
+                aria-label="HTML code editor"
                 value={draft.code}
-                onChange={(value) => setDraft((current) => ({ ...current, code: value ?? "" }))}
-                onMount={handleEditorMount}
-                options={{
-                  automaticLayout: true,
-                  minimap: { enabled: false },
-                  fontSize: 13,
-                  fontFamily: "'Cascadia Code', 'Fira Code', Consolas, monospace",
-                  lineNumbers: "on",
-                  scrollBeyondLastLine: false,
-                  wordWrap: "on",
-                  tabSize: 2,
-                  padding: { top: 16, bottom: 16 },
-                  renderLineHighlight: "line",
-                  bracketPairColorization: { enabled: true },
-                  suggestOnTriggerCharacters: true
-                }}
+                onChange={(event) => setDraft((current) => ({ ...current, code: event.target.value }))}
+                spellCheck="false"
+                autoCapitalize="off"
+                autoCorrect="off"
+                autoComplete="off"
+                inputMode="text"
+                wrap="off"
               />
-              </Suspense>
             </div>
             <div className="panel-footer"><span>{draft.code.split("\n").length} lines</span><span>Ctrl + S · Download HTML</span></div>
           </section>
@@ -442,7 +427,8 @@ export default function App() {
   const path = window.location.pathname.replace(/\/+$/, "") || "/";
   const base = APP_BASE.replace(/\/+$/, "");
   const route = base && path.startsWith(base) ? (path.slice(base.length) || "/") : path;
-  if (route === "/notepad" || route.endsWith("/notepad")) return <Notepad />;
-  if (route === "/html-editor" || route.endsWith("/html-editor")) return <HtmlEditor />;
+  const selectedTool = new URLSearchParams(window.location.search).get("tool");
+  if (selectedTool === "notepad" || route === "/notepad" || route.endsWith("/notepad")) return <Notepad />;
+  if (selectedTool === "html-editor" || route === "/html-editor" || route.endsWith("/html-editor")) return <HtmlEditor />;
   return <Dashboard />;
 }
