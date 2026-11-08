@@ -5,7 +5,7 @@ compatibility_flags = ["nodejs_compat"]
 
 [vars]
 SUPABASE_URL = "https://qccbsuxomdqdwfnqoycb.supabase.co"
-DASHBOARD_ORIGIN = "https://builder.apokolips.xyz"
+DASHBOARD_ORIGIN = "https://builder.apokolips.xyz,http://localhost:5173"
 
 [[d1_databases]]
 binding = "DB"
@@ -17,7 +17,5 @@ migrations_dir = "migrations"
 binding = "ASSETS"
 bucket_name = "apokolips-builder-assets"
 
-# Copy this example to wrangler.toml only after creating the D1 database
-# and R2 bucket. Keep secrets out of this file:
-#   npx wrangler secret put SUPABASE_URL
-# SUPABASE_URL above is a non-secret project URL and may remain in vars.
+# Copy this example to wrangler.toml only after creating D1 and R2.
+# Never commit Cloudflare account tokens or other secrets.
