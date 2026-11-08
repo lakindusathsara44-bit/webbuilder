@@ -32,7 +32,6 @@ function corsHeaders(request, env) {
 }
 
 function getJwks(env) {
-  if (!env.SUPABASE_URL) throw new Error("SUPABASE_URL is not configured");
   if (!jwksCache) {
     const issuerUrl = env.SUPABASE_URL.replace(/\/$/, "");
     jwksCache = createRemoteJWKSet(new URL(issuerUrl + "/auth/v1/.well-known/jwks.json"));
@@ -41,6 +40,9 @@ function getJwks(env) {
 }
 
 async function requireUser(request, env, headers) {
+  if (!env.SUPABASE_URL) {
+    return { response: json({ error: "Supabase authentication is not configured for this Worker." }, 503, headers) };
+  }
   const authorization = request.headers.get("Authorization") || "";
   const match = authorization.match(/^Bearer\s+(.+)$/i);
   if (!match) return { response: json({ error: "Authentication required" }, 401, headers) };
@@ -103,8 +105,9 @@ async function listSites(userId, env, headers) {
 async function createSite(request, userId, env, headers) {
   const parsed = await readJson(request);
   if (parsed.error) return json({ error: parsed.error }, parsed.status, headers);
-  const name = typeof parsed.value.name === "string" ? parsed.value.name.trim() : "";
-  const subdomain = typeof parsed.value.subdomain === "string" ? parsed.value.subdomain.trim().toLowerCase() : "";
+  const input = parsed.value && typeof parsed.value === "object" ? parsed.value : {};
+  const name = typeof input.name === "string" ? input.name.trim() : "";
+  const subdomain = typeof input.subdomain === "string" ? input.subdomain.trim().toLowerCase() : "";
   if (!name || name.length > 60) return json({ error: "Website name must be between 1 and 60 characters." }, 400, headers);
   if (subdomain.length < 3 || subdomain.length > 40 || !/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/.test(subdomain)) {
     return json({ error: "Subdomain must be 3–40 characters and use lowercase letters, numbers, or hyphens." }, 400, headers);
@@ -117,8 +120,8 @@ async function createSite(request, userId, env, headers) {
   const objectKey = "drafts/" + id + "/" + DRAFT_PATH;
   const now = Math.floor(Date.now() / 1000);
   const document = {
-    html: '<header class="hero"><h1>Welcome to your website</h1><p>Start creating something great.</p></header>',
-    css: "body{margin:0;font-family:Arial,sans-serif;color:#132238}.hero{padding:80px 8%;background:#eaf3ff}h1{font-size:clamp(36px,6vw,64px)}",
+    html: '<header class="hero"><nav class="nav"><strong>YOUR BRAND</strong><span>Home　 About　 Contact</span></nav><div class="hero-content"><p class="eyebrow">WELCOME TO YOUR WEBSITE</p><h1>Make your<br>presence known.</h1><p>Build a beautiful website that tells your story.</p><a class="hero-button" href="#about">Explore more ↗</a></div></header><section id="about" class="about"><p class="eyebrow">A NEW BEGINNING</p><h2>Made for your ideas.</h2><p>Replace this text, add your own sections, and make this space yours.</p></section>',
+    css: '* { box-sizing: border-box; } body { margin: 0; font-family: Inter, Arial, sans-serif; color: #eef5ff; background: #081426; } .hero { min-height: 520px; padding: 28px 7%; background: radial-gradient(circle at 80% 20%, #1c5892, transparent 35%), linear-gradient(135deg,#102d4e,#071323); } .nav { display:flex; justify-content:space-between; align-items:center; color:#c4dcf6; font-size:13px; } .hero-content { max-width:690px; padding:95px 0 70px; } .eyebrow { color:#78baff; font-size:11px; letter-spacing:3px; font-weight:700; } h1 { font-size:clamp(48px,8vw,86px); line-height:.98; letter-spacing:-5px; margin:18px 0; } .hero-content p:not(.eyebrow), .about p { color:#a7bbd2; line-height:1.8; } .hero-button { display:inline-block; margin-top:18px; padding:13px 18px; border:1px solid #79baff; border-radius:6px; color:#fff; text-decoration:none; } .about { padding:85px 7%; background:#0b1b30; } .about h2 { font-size:38px; }',
     js: "",
     project: null
   };
@@ -178,7 +181,8 @@ async function saveSite(request, siteId, userId, env, headers) {
 
   const parsed = await readJson(request);
   if (parsed.error) return json({ error: parsed.error }, parsed.status, headers);
-  const document = parsed.value && parsed.value.document;
+  const input = parsed.value && typeof parsed.value === "object" ? parsed.value : {};
+  const document = input.document;
   if (!document || typeof document.html !== "string" || typeof document.css !== "string" || typeof document.js !== "string") {
     return json({ error: "Document must contain HTML, CSS, and JavaScript strings." }, 400, headers);
   }
