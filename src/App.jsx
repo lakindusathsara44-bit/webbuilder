@@ -3,6 +3,7 @@ import MonacoEditor from "@monaco-editor/react";
 
 const NOTEPAD_KEY = "apokolips-office:notepad:v1";
 const HTML_KEY = "apokolips-office:html-editor:v1";
+const APP_BASE = import.meta.env.BASE_URL;
 
 const STARTER_HTML = [
   "<!doctype html>",
@@ -95,7 +96,7 @@ function downloadText(content, name, mimeType) {
 
 function Brand({ compact = false }) {
   return (
-    <a className={"brand-lockup" + (compact ? " brand-compact" : "")} href="/" aria-label="Apokolips Office home">
+    <a className={"brand-lockup" + (compact ? " brand-compact" : "")} href={APP_BASE} aria-label="Apokolips Office home">
       <span className="brand-mark">A</span>
       <span className="brand-wordmark">
         <strong>APOKOLIPS</strong>
@@ -183,7 +184,7 @@ function Dashboard() {
           </div>
           <div className="tool-grid">
             <ToolCard
-              href="/notepad/"
+              href={`${APP_BASE}notepad/`}
               number="01"
               icon="Aa"
               title="Notepad"
@@ -192,7 +193,7 @@ function Dashboard() {
               features={["Write and edit text", "Open and download text files", "Automatic local saving"]}
             />
             <ToolCard
-              href="/html-editor/"
+              href={`${APP_BASE}html-editor/`}
               number="02"
               icon="</>"
               title="HTML Editor"
@@ -315,7 +316,7 @@ function Notepad() {
           </div>
         </section>
       </main>
-      <footer className="editor-footer"><a href="/">← Back to Office</a><span>Tip: use Ctrl + S to download your note.</span></footer>
+      <footer className="editor-footer"><a href={APP_BASE}>← Back to Office</a><span>Tip: use Ctrl + S to download your note.</span></footer>
     </div>
   );
 }
@@ -435,7 +436,9 @@ function HtmlEditor() {
 
 export default function App() {
   const path = window.location.pathname.replace(/\/+$/, "") || "/";
-  if (path === "/notepad" || path.endsWith("/notepad")) return <Notepad />;
-  if (path === "/html-editor" || path.endsWith("/html-editor")) return <HtmlEditor />;
+  const base = APP_BASE.replace(/\/+$/, "");
+  const route = base && path.startsWith(base) ? (path.slice(base.length) || "/") : path;
+  if (route === "/notepad" || route.endsWith("/notepad")) return <Notepad />;
+  if (route === "/html-editor" || route.endsWith("/html-editor")) return <HtmlEditor />;
   return <Dashboard />;
 }

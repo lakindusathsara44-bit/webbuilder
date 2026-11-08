@@ -38,7 +38,7 @@ To create a production build, run npm run build. The output is written to the di
 
 The project is configured for a root-domain deployment such as office.apokolips.xyz. In the repository's Pages settings, select GitHub Actions as the deployment source when the domain and DNS are ready. The production build has separate static entry pages for the dashboard, Notepad, and HTML Editor so their URLs can be opened directly.
 
-The repository workflow currently checks that the application builds; it does not deploy the site automatically yet. Configure the custom domain and a deployment workflow separately before launch.
+The GitHub Actions Pages workflow deploys the project to `https://lakindusathsara44-bit.github.io/webbuilder/`. It uses `/webbuilder/` as the asset base path for this repository URL. When moving to the custom domain `office.apokolips.xyz`, set the Pages build variable `VITE_BASE_PATH` to `/` and configure the custom domain in repository Pages settings.
 
 ## Privacy and preview security
 
